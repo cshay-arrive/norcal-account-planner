@@ -11,10 +11,28 @@
     "isolatedModules": true,
     "noEmit": true,
     "jsx": "react-jsx",
+
+    /* Maximum strictness. `strict` turns on the core checks; everything below is
+       an extra check TypeScript does NOT include in `strict`. Together they make
+       the compiler catch the mistakes that would otherwise reach a dollar
+       figure on screen. */
     "strict": true,
-    "noUnusedLocals": false,
-    "noUnusedParameters": false,
-    "noFallthroughCasesInSwitch": true
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noImplicitReturns": true,
+    "noImplicitOverride": true,
+    /* Reading an array or Record by index may find nothing, so the type includes
+       `undefined` and every read must say what happens when it is missing. This
+       is what stops a silent NaN reaching a projection total. */
+    "noUncheckedIndexedAccess": true,
+    /* An optional property may be absent, but must not be explicitly set to
+       `undefined` — the two are different, and conflating them hides bugs. */
+    "exactOptionalPropertyTypes": true,
+    "allowUnusedLabels": false,
+    "allowUnreachableCode": false,
+    "forceConsistentCasingInFileNames": true,
+    "verbatimModuleSyntax": true
   },
   "include": ["src"]
 }

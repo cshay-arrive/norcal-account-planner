@@ -32,7 +32,15 @@ export function loadBook(): Book | null {
     const raw = store ? store.getItem(KEY) : memory;
     if (!raw) return null;
     return JSON.parse(raw) as Book;
-  } catch {
+  } catch (err) {
+    /* A saved book exists but will not parse. Returning null silently starts the
+       user over on the seed data with no explanation, which is very hard to
+       diagnose after the fact — so say so, with the reason attached. */
+    console.warn(
+      `Could not read the saved book at "${KEY}". Starting from the seed figures instead. ` +
+      "Any unsaved edits from the previous session are lost.",
+      err
+    );
     return null;
   }
 }

@@ -13,3 +13,10 @@ export const pct = (n: number, d = 0): string => `${((Number(n) || 0) * 100).toF
 export const cents = (n: number): string => `$${(Number(n) || 0).toFixed(2)}`;
 export const cents3 = (n: number): string => `$${(Number(n) || 0).toFixed(3)}`;
 export const nInt = (n: number): string => Math.round(Number(n) || 0).toLocaleString();
+
+/** "+18% vs 2025" — a projected year measured against the baseline. */
+export const delta = (v: number, base: number): string => {
+  if (!base) return "";
+  const d = (v - base) / base;
+  return `${d >= 0 ? "+" : ""}${pct(d)} vs 2025`;
+};

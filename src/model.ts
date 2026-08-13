@@ -30,6 +30,23 @@ export const DEFAULT_ECON: Record<ProductId, Econ> = {
 
 export const BASE_YEAR = 2025;
 
+/* How far the plan runs. Year 0 is the 2025 baseline, so years 1–3 are the
+   projection and Year 3 is the figure every headline quotes. */
+export const HORIZON_YEARS = 3;
+
+/* Adoption climbs in equal steps from today to its Year-3 target, so a
+   three-year ramp moves a third of the remaining gap each year. Same number as
+   HORIZON_YEARS today, but a different rule — shortening the plan and
+   shortening the ramp are separate decisions. */
+export const RAMP_YEARS = 3;
+
+/* One basis point is a hundredth of a percent, so 10,000 bps is the whole
+   amount. Divides processed dollars for the `bps` pricing model. */
+export const BPS_PER_UNIT = 10000;
+
+/* Divides a whole-number percentage (a 25% win probability arrives as 25). */
+export const PERCENT = 100;
+
 export const DEFAULT_SETTINGS: Settings = {
   feeBump: 0,
   /* Channel substitution: a higher app fee pushes sessions back to the meter.
@@ -56,7 +73,7 @@ export function normalize(a: AccountSeed | Account, i: number): Account {
     id: a.id || `a${i}-${(a.name || "row").slice(0, 8).replace(/\W/g, "")}`,
     name: a.name || "New account",
     zd: !!a.zd,
-    products: { ...({ MPP: "", MOR: "", Reservations: "", Flowbird: "", Insights: "", GMP: "" } as Record<ProductId, ProductState>), ...(a.products || {}) },
+    products: { ...({ MPP: "", MOR: "", Reservations: "", Flowbird: "", Insights: "", GMP: "" } as Record<ProductId, ProductState>), ...a.products },
     addressable: a.addressable || 0,
     adoptionNow: a.adoptionNow || 0,
     adoptionTarget: a.adoptionTarget || 0,
@@ -103,7 +120,7 @@ export function resolveEcon(a: Account, s: Settings, p: ProductId): ResolvedEcon
 export function potential(a: Account, s: Settings, p: ProductId): number {
   if (a.products[p] === "LIVE" || a.products[p] === "TARGET") return 0;
   const hyp = { ...a, products: { ...a.products, [p]: "TARGET" }, goLive: { ...a.goLive, [p]: 1 } };
-  return calc(hyp, { ...s, riskWeight: false }, 3, { renewal: false, cap: false }).byProduct[p];
+  return calc(hyp, { ...s, riskWeight: false }, HORIZON_YEARS, { renewal: false, cap: false }).byProduct[p];
 }
 
 export const hasOverrides = (a: Account): boolean =>
@@ -116,7 +133,7 @@ export function renewalYear(a: Account): number | null {
   const yr = parseInt(String(a.contractEnd).slice(0, 4), 10);
   if (!yr || yr < 2000) return null;
   const ry = yr - BASE_YEAR + 1;
-  if (ry > 3) return null;
+  if (ry > HORIZON_YEARS) return null;
   return Math.max(1, ry);
 }
 
@@ -126,14 +143,14 @@ export function renewalYear(a: Account): number | null {
  * opts lets the waterfall isolate one driver at a time.
  */
 export function calc(a: Account, s: Settings, y: number, opts?: CalcOpts): YearResult {
-  const o = { growth: true, fee: true, adoption: true, targets: true, renewal: true, cap: true, ...(opts || {}) };
+  const o = { growth: true, fee: true, adoption: true, targets: true, renewal: true, cap: true, ...opts };
   const g = y === 0 ? 0 : (o.growth ? clamp(a.growth + s.growthDelta, -0.5, 2) : 0);
   const addressable = a.addressable * Math.pow(1 + g, y);
 
   let adoption = a.adoptionNow;
   if (y > 0 && o.adoption) {
     const tgt = clamp(a.adoptionTarget + s.adoptionDelta, 0, 1);
-    adoption = clamp(a.adoptionNow + ((tgt - a.adoptionNow) * y) / 3, 0, 1);
+    adoption = clamp(a.adoptionNow + ((tgt - a.adoptionNow) * y) / RAMP_YEARS, 0, 1);
   }
 
   let fee = a.feeNow;
@@ -169,7 +186,7 @@ export function calc(a: Account, s: Settings, y: number, opts?: CalcOpts): YearR
       const live = a.goLive[p] || s.defaultGoLive;
       if (y < live) return 0;
       const wp = a.winProb == null ? s.winProb : a.winProb;
-      return s.riskWeight ? clamp(wp / 100, 0, 1) : 1;
+      return s.riskWeight ? clamp(wp / PERCENT, 0, 1) : 1;
     }
     return 0;
   };
@@ -181,9 +198,9 @@ export function calc(a: Account, s: Settings, y: number, opts?: CalcOpts): YearR
     let v = 0;
     if (p === "MPP" || e.model === "accountFee") v = mppTrx * fee;
     else if (e.model === "perTrx") v = mppTrx * e.rate;
-    else if (e.model === "bps") v = (volume * e.rate) / 10000;
+    else if (e.model === "bps") v = (volume * e.rate) / BPS_PER_UNIT;
     else if (e.model === "flat") v = e.rate;
-    else if (e.model === "pctMpp") v = (mppRev * e.rate) / 100;
+    else if (e.model === "pctMpp") v = (mppRev * e.rate) / PERCENT;
     else if (e.model === "perStation") v = (a.fbStations || 0) * (p === "Flowbird" ? (a.fbRate || e.rate) : e.rate);
     v = v * w;
     byProduct[p] = v;
@@ -204,7 +221,7 @@ export function calc(a: Account, s: Settings, y: number, opts?: CalcOpts): YearR
   let atRisk = 0;
   const ry = renewalYear(a);
   if (o.renewal && s.renewalRisk && ry && y >= ry) {
-    const pr = clamp((a.renewProb == null ? s.defaultRenewProb : a.renewProb) / 100, 0, 1);
+    const pr = clamp((a.renewProb == null ? s.defaultRenewProb : a.renewProb) / PERCENT, 0, 1);
     atRisk = total * (1 - pr);
     total = total - atRisk;
   }
@@ -218,8 +235,12 @@ export function calc(a: Account, s: Settings, y: number, opts?: CalcOpts): YearR
   return { total, gross, byProduct, mppTrx, adoption, adoptionLoss, fee, addressable, volume, capped, atRisk, renewalYear: ry };
 }
 
+/* Year 0 (the 2025 baseline) through Year 3, the years every table column and
+   projection array is indexed by. */
+export const PLAN_YEARS: number[] = Array.from({ length: HORIZON_YEARS + 1 }, (_, y) => y);
+
 export function accountSeries(a: Account, s: Settings): YearResult[] {
-  return [0, 1, 2, 3].map((y) => calc(a, s, y));
+  return PLAN_YEARS.map((y) => calc(a, s, y));
 }
 
 /** Y3 build-up: what each lever is worth. */
@@ -228,13 +249,14 @@ export function waterfall(a: Account, s: Settings): WaterfallResult {
      separately so the build-up stays additive. */
   const o = { renewal: false, cap: false };
   const noElastic = { ...s, elasticityOn: false };
+  const end = HORIZON_YEARS;
   const base = calc(a, s, 0, o).total;
-  const v1 = calc(a, s, 3, { ...o, fee: false, adoption: false, targets: false }).total;
-  const v2 = calc(a, s, 3, { ...o, adoption: false, targets: false }).total;
-  const v2gross = calc(a, noElastic, 3, { ...o, adoption: false, targets: false }).total;
-  const v3 = calc(a, s, 3, { ...o, targets: false }).total;
-  const v4 = calc(a, s, 3, o).total;
-  const y3 = calc(a, s, 3);
+  const v1 = calc(a, s, end, { ...o, fee: false, adoption: false, targets: false }).total;
+  const v2 = calc(a, s, end, { ...o, adoption: false, targets: false }).total;
+  const v2gross = calc(a, noElastic, end, { ...o, adoption: false, targets: false }).total;
+  const v3 = calc(a, s, end, { ...o, targets: false }).total;
+  const v4 = calc(a, s, end, o).total;
+  const y3 = calc(a, s, end);
   return {
     base, volume: v1 - base, fee: v2 - v1, adoption: v3 - v2, newProducts: v4 - v3, total: v4,
     feeGross: v2gross - v1, elasticityCost: v2gross - v2,

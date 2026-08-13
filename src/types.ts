@@ -1,5 +1,7 @@
 /* Shared shapes for the account book model. */
 
+import type { Dispatch, SetStateAction } from "react";
+
 export type ProductId = "MPP" | "MOR" | "Reservations" | "Flowbird" | "Insights" | "GMP";
 export type ProductState = "" | "TARGET" | "LIVE" | "N/A";
 export type EconModelId = "accountFee" | "perTrx" | "bps" | "flat" | "pctMpp" | "perStation";
@@ -153,3 +155,47 @@ export interface RenewalBucket {
   rev: number;
   warn?: boolean;
 }
+
+/* ── Shapes shared between App and the page components ── */
+
+/** Applies a partial edit to one account by id. */
+export type Patch = (id: string, fields: Partial<Account>) => void;
+
+/** Which account drawers are expanded, keyed by account id. */
+export type OpenMap = Record<string, boolean>;
+export type SetOpen = Dispatch<SetStateAction<OpenMap>>;
+
+/** Transaction-weighted blended rates for one year. */
+export interface Rate {
+  trx: number;
+  size: number;
+  fee: number;
+  take: number;
+}
+
+/** One row of the blended-rate table on the Overview page. */
+export interface RateRow {
+  k: string;
+  f: (r: Rate) => string;
+  hint?: string;
+  bold?: boolean;
+}
+
+/** One ranked opportunity on the Overview page: a product to win, a fee to
+    raise, or adoption to lift at a named account. */
+export interface Lever {
+  /** A ProductId, "Fee increase", or "Adoption lift". */
+  kind: string;
+  name: string;
+  value: number;
+  id: string;
+}
+
+/** Which page is in view. */
+export type PageId = "overview" | "accounts" | "products" | "contracts";
+
+/** How the accounts table is sorted. */
+export type SortKey = "y3" | "base" | "delta" | "upside" | "name";
+
+/** The "needs attention" filter on the Accounts page. */
+export type FlagFilter = "all" | "overrides" | "nocontract" | "atrisk";
