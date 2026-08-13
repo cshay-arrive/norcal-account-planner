@@ -52,18 +52,33 @@ Single-page React 18 + TypeScript app built with Vite 5.
 
 **Entry point**: `src/main.tsx` → `src/App.tsx`
 
-Unlike the Flowbird scheduler, this project **does** separate its layers:
+Unlike the Flowbird scheduler, this project separates its layers, and no file
+exceeds 380 lines:
 
 ```
 src/
-  types.ts     shared model shapes (16 exported types/interfaces)
+  types.ts     shared shapes — model, plus PageId / SortKey / FlagFilter etc.
   tokens.ts    Arrive palette, type stack, 20px grid
-  format.ts    currency, percent and count formatting
+  format.ts    currency, percent, count and delta formatting
+  styles.ts    style recipes: btn, pill, table cells, selects
   model.ts     the projection: calc, waterfall, elasticity, contracts
   seed.ts      baseline book from NorCal_Client_Book.xlsx (SENSITIVE)
   storage.ts   localStorage persistence with in-memory fallback
-  App.tsx      all UI: pages, rail, tables, drawer (~1715 lines)
+  ui.tsx       primitives: Num, Text, Slider, Check, Field, Kpi, Panel, …
+  App.tsx      state, derived roll-ups, layout (378 lines)
+  pages/
+    PageTabs.tsx       top-level navigation
+    Rail.tsx           left rail — scenario levers + per-page panel
+    OverviewPage.tsx   KPI band, blended rates, biggest levers
+    AccountsPage.tsx   the account table
+    ProductsPage.tsx   ProductPicker + one product across the book
+    ContractsPage.tsx  renewal exposure and contract terms
+    Drawer.tsx         the per-account expanding panel
 ```
+
+**`App.tsx` owns all state; the pages are presentational.** They receive data
+and callbacks and render — they do not hold book state. Keep it that way: if a
+page needs new state, lift it into `App.tsx` and pass it down.
 
 **`model.ts` imports nothing from React.** Keep it that way — it is the pure
 projection layer and can be unit-tested or reused by an import/export path
@@ -73,8 +88,10 @@ without touching the UI. Never put DOM or React code in it.
 
 - **Baseline (year 0) is 2025** (`BASE_YEAR`): live products only, today's fee,
   today's adoption, no growth
-- **Adoption ramp** is linear from today toward the Year-3 target (`/ 3` in
-  `calc`)
+- **Adoption ramp** is linear from today toward the Year-3 target
+  (`/ RAMP_YEARS` in `calc`). `RAMP_YEARS` and `HORIZON_YEARS` are both 3 today
+  but are deliberately separate constants — shortening the plan and shortening
+  the ramp are different business decisions
 - **Fee elasticity** (default −0.15, relative): a higher app fee pushes sessions
   back to the meter, so raising the fee takes some adoption back. Applied to
   adoption, not to total demand. This is a deliberately conservative starting
@@ -92,9 +109,28 @@ transaction fee), `perTrx`, `bps` (÷10000 of processed dollars), `flat`,
 
 ### Styling
 
-Inline `style` objects using tokens from `src/tokens.ts`. Shared table style
-objects **must be annotated `: CSSProperties`** — otherwise TypeScript widens
-`textAlign: "right"` to `string` and the build fails with 30+ errors.
+Inline `style` objects using tokens from `src/tokens.ts`, with reusable recipes
+in `src/styles.ts`. Any shared style object **must be annotated
+`: CSSProperties`** — otherwise TypeScript widens `textAlign: "right"` to
+`string` and the build fails.
+
+### Form fields
+
+`id` is a **required** prop on `Num`, `Text` and `Slider`, so the build fails if
+an input is added without one. Screen readers need it to announce the field and
+browsers need it for autofill. Scope ids so they cannot collide when several
+account drawers are open — the existing pattern is `acct-${a.id}-${part}`.
+
+### TypeScript
+
+The project runs at maximum strictness (see `tsconfig.json`). The two flags that
+shape the code most:
+
+- `noUncheckedIndexedAccess` — reading `series[3]` or `totals.years[i]` yields
+  `T | undefined`, so use `?? 0` for figures. This is what keeps a `NaN` out of
+  a dollar amount on screen.
+- `exactOptionalPropertyTypes` — when forwarding an optional prop down, declare
+  the receiver as `foo?: string | undefined`, not `foo?: string`.
 
 ### Persistence
 
