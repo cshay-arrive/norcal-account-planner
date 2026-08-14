@@ -3,7 +3,6 @@
 
 import { BODY, C, DISPLAY, R, U } from "../tokens";
 import { cents3, delta, dollars, money, nInt, pct } from "../format";
-import { BOOKED_2025 } from "../seed";
 import { renewalYear } from "../model";
 import { BuildStrip, Info, Kpi, Label, Panel, SpacePattern } from "../ui";
 import type { AccountRow, Lever, Rate, RateRow, SetOpen, Settings, Totals } from "../types";
@@ -17,16 +16,18 @@ const RATE_ROWS: RateRow[] = [
 ];
 
 export function OverviewPage({
-  totals, rows, rates, s, levers, setOpen, showLevers, setShowLevers,
+  totals, rows, rates, s, levers, setOpen, showLevers, setShowLevers, booked2025,
 }: {
   totals: Totals; rows: AccountRow[]; rates: Rate[]; s: Settings; levers: Lever[];
   setOpen: SetOpen; showLevers: boolean; setShowLevers: (v: boolean) => void;
+  /** 2025 revenue as booked — from the loaded book, or the demo figure. */
+  booked2025: number;
 }) {
   const y0 = totals.years[0] ?? 0;
   const y3 = totals.years[3] ?? 0;
   const growthPct = y0 ? (y3 - y0) / y0 : 0;
   const cagr = y0 > 0 ? Math.pow(y3 / y0, 1 / 3) - 1 : 0;
-  const unpriced = y0 - BOOKED_2025;
+  const unpriced = y0 - booked2025;
   const atRisk3 = totals.atRisk[3] ?? 0;
   const capped3 = totals.capped[3] ?? 0;
   const r0 = rates[0];
@@ -38,7 +39,7 @@ export function OverviewPage({
       <div style={{ position: "relative", background: C.panel, borderRadius: R, padding: U, marginBottom: U, overflow: "hidden" }}>
         <div style={{ position: "absolute", inset: 0, opacity: 0.06 }}><SpacePattern fill={C.purple} size={30} /></div>
         <div style={{ position: "relative", display: "grid", gridTemplateColumns: "repeat(auto-fit,minmax(132px,1fr))", gap: 16, marginBottom: 18 }}>
-          <Kpi label="2025 baseline" value={money(y0)} note={`booked ${money(BOOKED_2025)}`} />
+          <Kpi label="2025 baseline" value={money(y0)} note={`booked ${money(booked2025)}`} />
           <Kpi label="Year 1" value={money(totals.years[1] ?? 0)} note={delta(totals.years[1] ?? 0, y0)} />
           <Kpi label="Year 2" value={money(totals.years[2] ?? 0)} note={delta(totals.years[2] ?? 0, y0)} />
           <Kpi label="Year 3" value={money(y3)} note={delta(y3, y0)} big />
@@ -62,9 +63,9 @@ export function OverviewPage({
         {Math.abs(unpriced) > 1000 && (
           <div style={{ position: "relative", marginTop: 14, fontSize: 12.5, color: C.ink, background: C.pink, borderRadius: R, padding: `${U / 2}px ${U * 0.7}px` }}>
             {unpriced > 0 ? (
-              <>Your modeled 2025 baseline runs <strong>{money(unpriced)}</strong> above the {money(BOOKED_2025)} you actually booked. That gap is products sitting at LIVE which carry a price here but no revenue in the spreadsheet — mostly MOR. Either it's bundled into the transaction fee, or it's value you're giving away.</>
+              <>Your modeled 2025 baseline runs <strong>{money(unpriced)}</strong> above the {money(booked2025)} you actually booked. That gap is products sitting at LIVE which carry a price here but no revenue in the spreadsheet — mostly MOR. Either it's bundled into the transaction fee, or it's value you're giving away.</>
             ) : (
-              <>Your modeled 2025 baseline runs <strong>{money(-unpriced)}</strong> below the {money(BOOKED_2025)} you booked. Some revenue isn't reaching the model — check accounts where a product is earning but its state is blank or N/A.</>
+              <>Your modeled 2025 baseline runs <strong>{money(-unpriced)}</strong> below the {money(booked2025)} you booked. Some revenue isn't reaching the model — check accounts where a product is earning but its state is blank or N/A.</>
             )}
           </div>
         )}

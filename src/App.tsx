@@ -3,10 +3,12 @@
    render. Nothing here draws a table. */
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import type { ChangeEvent } from "react";
 
-import { BODY, C, DISPLAY, U } from "./tokens";
+import { BODY, C, DISPLAY, R, Rsm, U } from "./tokens";
 import { cents, pct } from "./format";
-import { SEED } from "./seed";
+import { BOOKED_2025, DEMO_LABEL, SEED } from "./seed";
+import { downloadBook, parseBookFile } from "./bookFile";
 import { clearBook, loadBook, saveBook } from "./storage";
 import {
   DEFAULT_ECON, DEFAULT_SETTINGS, PLAN_YEARS, PRODUCTS, STATES,
@@ -46,7 +48,15 @@ export default function AccountBookPlanner() {
   const [flagFilter, setFlagFilter] = useState<FlagFilter>("all");
   const [onlyMissingContracts, setOnlyMissingContracts] = useState(false);
   const [status, setStatus] = useState("");
+  /* The 2025 booked figure travels with the book, so a loaded book reconciles
+     against its own number rather than the demo one. */
+  const [booked2025, setBooked2025] = useState(BOOKED_2025);
+  const [bookLabel, setBookLabel] = useState(DEMO_LABEL);
+  const [loadError, setLoadError] = useState("");
   const loaded = useRef<boolean>(false);
+  const fileInput = useRef<HTMLInputElement>(null);
+
+  const isDemo = bookLabel === DEMO_LABEL;
 
   /* load saved book */
   useEffect(() => {
@@ -56,6 +66,8 @@ export default function AccountBookPlanner() {
       if (d.settings) {
         setS({ ...DEFAULT_SETTINGS, ...d.settings, econ: { ...DEFAULT_ECON, ...d.settings.econ } });
       }
+      if (typeof d.booked2025 === "number") setBooked2025(d.booked2025);
+      if (d.label) setBookLabel(d.label);
       setStatus("Loaded your saved book");
     }
     loaded.current = true;
@@ -65,7 +77,7 @@ export default function AccountBookPlanner() {
   useEffect(() => {
     if (!loaded.current) return;
     const t = setTimeout(() => {
-      if (saveBook({ accounts, settings: s })) {
+      if (saveBook({ accounts, settings: s, booked2025, label: bookLabel })) {
         setStatus("Saved");
         setTimeout(() => setStatus(""), 1400);
       } else {
@@ -73,7 +85,7 @@ export default function AccountBookPlanner() {
       }
     }, 700);
     return () => clearTimeout(t);
-  }, [accounts, s]);
+  }, [accounts, s, booked2025, bookLabel]);
 
   /* Scenario takes the rail on Overview; elsewhere it steps back to a summary. */
   useEffect(() => {
@@ -109,8 +121,47 @@ export default function AccountBookPlanner() {
   const resetBook = () => {
     setAccounts(SEED.map(normalize));
     setS(DEFAULT_SETTINGS);
+    setBooked2025(BOOKED_2025);
+    setBookLabel(DEMO_LABEL);
+    setLoadError("");
     clearBook();
-    setStatus("Reset to the spreadsheet numbers");
+    setStatus("Back to sample data");
+  };
+
+  /* Reads a book from the user's own computer. Nothing is uploaded — the file
+     is parsed in the browser and kept in this browser's local storage. */
+  const onPickFile = (e: ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    /* Clear the input so picking the same file twice still fires a change. */
+    e.target.value = "";
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onerror = () => setLoadError(`Could not read "${file.name}". Check the file and try again.`);
+    reader.onload = () => {
+      const result = parseBookFile(String(reader.result ?? ""), file.name);
+      if (!result.ok) {
+        setLoadError(result.error);
+        return;
+      }
+      const book = result.book;
+      setAccounts(book.accounts.map(normalize));
+      if (book.settings) {
+        setS({ ...DEFAULT_SETTINGS, ...book.settings, econ: { ...DEFAULT_ECON, ...book.settings.econ } });
+      }
+      setBooked2025(book.booked2025);
+      setBookLabel(book.label);
+      setLoadError("");
+      setOpen({});
+      setStatus(`Loaded ${book.accounts.length} accounts`);
+    };
+    reader.readAsText(file);
+  };
+
+  const saveBookFile = () => {
+    downloadBook(accounts, s, booked2025, bookLabel === DEMO_LABEL ? "book" : bookLabel);
+    setStatus("Book saved to your downloads");
+    setTimeout(() => setStatus(""), 2200);
   };
 
   /* ── computed ── */
@@ -307,23 +358,53 @@ export default function AccountBookPlanner() {
         {/* ── masthead ── */}
         <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", gap: 16, flexWrap: "wrap", marginBottom: U }}>
           <div>
-            <div style={{ display: "flex", alignItems: "baseline", gap: 10 }}>
+            <div style={{ display: "flex", alignItems: "baseline", gap: 10, flexWrap: "wrap" }}>
               <h1 style={{ margin: 0, fontFamily: DISPLAY, fontSize: 38, fontWeight: 400, letterSpacing: "-0.02em", lineHeight: 1.05 }}>
                 Account book planner
               </h1>
-              <span style={{ fontFamily: BODY, fontSize: 12, color: C.muted }}>NorCal · {accounts.length} accounts</span>
+              <span style={{
+                fontFamily: BODY, fontSize: 11, fontWeight: 700, borderRadius: Rsm, padding: "3px 8px",
+                background: isDemo ? C.tintDeep : C.pink, color: isDemo ? C.muted : C.aubergine,
+              }}>
+                {bookLabel}
+              </span>
+              <span style={{ fontFamily: BODY, fontSize: 12, color: C.muted }}>{accounts.length} accounts</span>
             </div>
             <div style={{ fontSize: 13.5, color: C.ink, marginTop: 6, maxWidth: 620 }}>
               Change a number, a product state, or a scenario lever. The three-year projection re-rolls as you type.
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
             <span role="status" style={{ fontFamily: BODY, fontSize: 11.5, fontWeight: 700, color: C.purple, minWidth: 60 }}>{status}</span>
-            <button onClick={addRow} style={btn(true)}>Add account</button>
+            <input ref={fileInput} type="file" accept="application/json,.json" onChange={onPickFile}
+              style={{ display: "none" }} aria-hidden="true" tabIndex={-1} />
+            <button onClick={() => fileInput.current?.click()} style={btn(isDemo)}>Load book</button>
+            <button onClick={saveBookFile} style={btn()}>Save book</button>
+            <button onClick={addRow} style={btn()}>Add account</button>
             <button onClick={exportCsv} style={btn()}>Export CSV</button>
             <button onClick={resetBook} style={btn()}>Reset</button>
           </div>
         </div>
+
+        {loadError && (
+          <div role="alert" style={{
+            background: C.pink, borderRadius: R, padding: `${U * 0.6}px ${U * 0.7}px`,
+            marginBottom: U, fontSize: 12.5, color: C.ink,
+          }}>
+            <strong>That file would not load.</strong> {loadError}
+          </div>
+        )}
+
+        {isDemo && (
+          <div style={{
+            background: C.panel, border: `1px solid ${C.line}`, borderRadius: R,
+            padding: `${U * 0.6}px ${U * 0.7}px`, marginBottom: U, fontSize: 12.5, color: C.ink, lineHeight: 1.6,
+          }}>
+            <strong style={{ color: C.purple }}>You are looking at sample data.</strong> These six accounts are invented,
+            so this page is safe to share. Click <strong>Load book</strong> to open your real book from a file on your
+            computer — it is read in your browser and never uploaded. Once loaded, this browser remembers it.
+          </div>
+        )}
 
         <PageTabs page={page} setPage={setPage} accountCount={accounts.length}
           contractsBadge={expiring.length || totals.unknownContracts} />
@@ -347,7 +428,8 @@ export default function AccountBookPlanner() {
           <div>
             {page === "overview" && (
               <OverviewPage totals={totals} rows={rows} rates={rates} s={s} levers={levers}
-                setOpen={setOpen} showLevers={showLevers} setShowLevers={setShowLevers} />
+                setOpen={setOpen} showLevers={showLevers} setShowLevers={setShowLevers}
+                booked2025={booked2025} />
             )}
 
             {page === "accounts" && (

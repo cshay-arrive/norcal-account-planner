@@ -7,3 +7,8 @@ dist-ssr
 .env
 .env.*
 .env*
+
+# Real account books. These hold actual client revenue and must never be
+# committed or bundled — the app loads them from disk at runtime instead.
+private/
+*.book.json

@@ -180,7 +180,8 @@ export function Rail({
 
           <div style={{ display: "flex", flexDirection: "column", gap: U * 0.7 }}>
             <Field label="Search by name" htmlFor="filter-search">
-              <Text id="filter-search" value={query} onChange={setQuery} placeholder="Sacramento" />
+              {/* Placeholder must stay generic — this string ships in the public bundle. */}
+              <Text id="filter-search" value={query} onChange={setQuery} placeholder="Type a name…" />
             </Field>
 
             <div>

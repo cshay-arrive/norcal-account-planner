@@ -11,6 +11,10 @@ const KEY = "norcalbook:v1";
 export interface Book {
   accounts: Account[];
   settings: Settings;
+  /** 2025 revenue as actually booked, for the baseline reconciliation. */
+  booked2025?: number;
+  /** Which book this is. Absent means the built-in demo figures. */
+  label?: string;
 }
 
 let memory: string | null = null;
